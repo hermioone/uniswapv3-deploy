@@ -13,7 +13,7 @@ module.exports = async ({ getNamedAccounts, deployments }) => {
 		contract: "UniswapV3Pool",
 		from: deployer,
 		log: true,
-		args: [ethAddr, usdcAddr, 1, 0],
+		args: [ethAddr, usdcAddr, BigInt(5602277097478614198912276234240), 85176],
 	});
 
     await deploy("UniswapV3Manager", {
@@ -21,5 +21,11 @@ module.exports = async ({ getNamedAccounts, deployments }) => {
         from: deployer,
         log: true,
     });
+
+	await deploy("UniswapV3Quoter", {
+		contract: "UniswapV3Quoter",
+		from: deployer,
+		log: true,
+	})
 
 };

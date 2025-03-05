@@ -11,7 +11,7 @@ library Tick {
         mapping(int24 => Tick.Info) storage self,
         int24 tick,
         uint128 liquidityDelta
-    ) internal {
+    ) internal returns (bool flipped) {
         Tick.Info storage tickInfo = self[tick];
         uint128 liquidityBefore = tickInfo.liquidity;
         uint128 liquidityAfter = liquidityBefore + liquidityDelta;
@@ -19,5 +19,7 @@ library Tick {
             tickInfo.initialized = true;
         }
         tickInfo.liquidity = liquidityAfter;
+
+        flipped = (liquidityAfter == 0) != (liquidityBefore == 0);
     }
 }

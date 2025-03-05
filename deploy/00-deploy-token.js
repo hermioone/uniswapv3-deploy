@@ -17,9 +17,7 @@ module.exports = async ({ getNamedAccounts, deployments }) => {
             args: ["Ether", "ETH"],
             waitConfirmations: network.config.blockConfirmations,
         });
-        log("('************ WETH deployed successfully...");
         const ethAddr = (await deployments.get('WETH')).address;
-        log("********** ethAddr: ", ethAddr)
         const ethContract = await ethers.getContractAt('ERC20Mintable', ethAddr, signer);
         await ethContract.mint(tokenOwner, BigInt(1000 * (10 ** 18)));
         await deploy("USDC", {
@@ -32,7 +30,6 @@ module.exports = async ({ getNamedAccounts, deployments }) => {
         const usdcAddr = (await deployments.get('USDC')).address;
         const usdcContract = await ethers.getContractAt('ERC20Mintable', usdcAddr, signer);
         await usdcContract.mint(tokenOwner, BigInt(1000000 * (10 ** 18)));
-        log("('************ USDC deployed successfully...");
     }
 };
 

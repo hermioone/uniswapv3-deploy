@@ -27,9 +27,17 @@ contract UniswapV3Manager is IUniswapV3MintCallback, IUniswapV3SwapCallback {
 
     function swap(
         address poolAddress_,
+        bool zeroForOne,
+        uint256 amountSpecified,
         bytes calldata data
-    ) public {
-        UniswapV3Pool(poolAddress_).swap(msg.sender, data);
+    ) public returns (int256, int256) {
+        return
+            UniswapV3Pool(poolAddress_).swap(
+                msg.sender,
+                zeroForOne,
+                amountSpecified,
+                data
+            );
     }
 
     function uniswapV3MintCallback(uint256 amount0, uint256 amount1, bytes calldata data) override external {
