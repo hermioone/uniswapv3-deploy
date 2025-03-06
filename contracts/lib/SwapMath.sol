@@ -16,12 +16,31 @@ library SwapMath {
     {
         bool zeroForOne = sqrtPriceCurrentX96 >= sqrtPriceTargetX96;
 
-        sqrtPriceNextX96 = Math.getNextSqrtPriceFromInput(
-            sqrtPriceCurrentX96,
-            liquidity,
-            amountRemaining,
-            zeroForOne
-        );
+        amountIn = zeroForOne
+            ? Math.calcAmount0Delta(
+                sqrtPriceCurrentX96,
+                sqrtPriceTargetX96,
+                liquidity
+            )
+            : Math.calcAmount1Delta(
+                sqrtPriceCurrentX96,
+                sqrtPriceTargetX96,
+                liquidity
+            );
+
+        if (amountRemaining >= amountIn) {
+            // 此时说明当前 tick 区间不足以满足所有的交易金额，
+            sqrtPriceNextX96 = sqrtPriceTargetX96;
+        } else {
+            // 此时说明当前 tick 区间足以满足交易金额
+            // sqrtPriceCurrentX96 < sqrtPriceNextX96 < sqrtPriceTargetX96
+            sqrtPriceNextX96 = Math.getNextSqrtPriceFromInput(
+                sqrtPriceCurrentX96,
+                liquidity,
+                amountRemaining,
+                zeroForOne
+            );
+        }
 
         amountIn = Math.calcAmount0Delta(
             sqrtPriceCurrentX96,
