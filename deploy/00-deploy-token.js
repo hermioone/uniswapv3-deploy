@@ -10,7 +10,8 @@ module.exports = async ({ getNamedAccounts, deployments }) => {
 
     if (developmentChains.includes(network.name)) {
         log('************ Test network detected! Start to deploy ETH and USDC by ', deployer);
-        const eth = await deploy("WETH", {
+        
+        await deploy("WETH", {
             contract: "ERC20Mintable",
             from: deployer,
             log: true,
@@ -20,6 +21,7 @@ module.exports = async ({ getNamedAccounts, deployments }) => {
         const ethAddr = (await deployments.get('WETH')).address;
         const ethContract = await ethers.getContractAt('ERC20Mintable', ethAddr, signer);
         await ethContract.mint(tokenOwner, BigInt(1000 * (10 ** 18)));
+
         await deploy("USDC", {
             contract: "ERC20Mintable",
             from: deployer,

@@ -10,7 +10,16 @@ const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "";
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
-	solidity: "0.8.24",
+	solidity: {
+		compilers: [{version: "0.8.24"}],
+		settings: {
+			optimizer: {
+				enabled: true,
+				runs: 200,
+			},
+			viaIR: true,
+		},
+	},
 	etherscan: {
 		apiKey: ETHERSCAN_API_KEY,
 	},
@@ -23,8 +32,12 @@ module.exports = {
 		localhost: {
 			url: "http:127.0.0.1:8545",
 			chainId: 31337,
-			blockConfirmations: 1
+			blockConfirmations: 1,
+			allowUnlimitedContractSize: true,
 		},
+		hardhat: {
+			allowUnlimitedContractSize: true,
+		}
 	},
 	namedAccounts: {
 		deployer: {

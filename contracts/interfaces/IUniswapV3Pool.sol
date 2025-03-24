@@ -14,6 +14,8 @@ interface IUniswapV3Pool {
 
     function token1() external view returns (address);
 
+    function initialize(uint160 sqrtPriceX96) external;
+
     function mint(
         address owner,
         int24 lowerTick,

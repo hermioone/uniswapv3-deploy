@@ -14,6 +14,7 @@ import "./lib/LiquidityMath.sol";
 import "./interfaces/IUniswapV3MintCallback.sol";
 import "./interfaces/IUniswapV3SwapCallback.sol";
 import "./interfaces/IUniswapV3Pool.sol";
+import "./interfaces/IUniswapV3PoolDeployer.sol";
 
 contract UniswapV3Pool is IUniswapV3Pool {
     error InvalidTickRange();
@@ -21,6 +22,7 @@ contract UniswapV3Pool is IUniswapV3Pool {
     error InsufficientInputAmount();
     error NotEnoughLiquidity();
     error InvalidPriceLimit();
+    error AlreadyInitialized();
 
     event Mint(
         address sender,
@@ -51,8 +53,10 @@ contract UniswapV3Pool is IUniswapV3Pool {
     int24 internal constant MIN_TICK = -887272;
     int24 internal constant MAX_TICK = -MIN_TICK;
 
+    address public immutable factory;
     address public immutable token0;
     address public immutable token1;
+    uint24 public immutable tickSpacing;
 
     // 当前 swap 的状态
     struct SwapState {
@@ -98,15 +102,16 @@ contract UniswapV3Pool is IUniswapV3Pool {
     mapping(int16 => uint256) public tickBitmap;
     mapping(bytes32 => Position.Info) positions;
 
-    constructor(
-        address token0_,
-        address token1_,
-        uint160 sqrtPriceX96,
-        int24 tick
-    ) {
-        token0 = token0_;
-        token1 = token1_;
+    constructor() {
+        (factory, token0, token1, tickSpacing) = IUniswapV3PoolDeployer(msg.sender).parameters();
+    }
 
+    function initialize(uint160 sqrtPriceX96) public {
+        if (slot0.sqrtPriceX96 != 0) {
+            revert AlreadyInitialized();
+        }
+
+        int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
         slot0 = Slot0({sqrtPriceX96: sqrtPriceX96, tick: tick});
     }
 

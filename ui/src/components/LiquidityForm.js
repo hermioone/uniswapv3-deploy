@@ -3,92 +3,16 @@ import { ethers } from 'ethers';
 import { useContext, useEffect, useState } from 'react';
 import { uint256Max } from '../lib/constants';
 import { MetaMaskContext } from '../contexts/MetaMask';
-import { TickMath, encodeSqrtRatioX96 } from '@uniswap/v3-sdk';
+import { TickMath, encodeSqrtRatioX96, nearestUsableTick } from '@uniswap/v3-sdk';
 import config from "../config.js";
 
-const slippage = 0.5;
+const slippage = 1.5;
 
 const formatAmount = ethers.utils.formatUnits
 
 const priceToSqrtP = (price) => encodeSqrtRatioX96(price, 1);
 
 const priceToTick = (price) => TickMath.getTickAtSqrtRatio(priceToSqrtP(price));
-
-const addLiquidity = (account, lowerPrice, upperPrice, amount0, amount1, { token0, token1, manager, poolInterface }) => {
-  if (!token0 || !token1) {
-    return;
-  }
-
-  const amount0Desired = ethers.utils.parseEther(amount0);
-  const amount1Desired = ethers.utils.parseEther(amount1);
-  const amount0Min = amount0Desired.mul((100 - slippage) * 100).div(10000);
-  const amount1Min = amount1Desired.mul((100 - slippage) * 100).div(10000);
-
-  const lowerTick = priceToTick(lowerPrice);
-  const upperTick = priceToTick(upperPrice);
-
-  const mintParams = {
-    poolAddress: config.poolAddress,
-    lowerTick, upperTick, amount0Desired, amount1Desired, amount0Min, amount1Min
-  }
-
-  return Promise.all(
-    [
-      token0.allowance(account, config.managerAddress),
-      token1.allowance(account, config.managerAddress)
-    ]
-  ).then(([allowance0, allowance1]) => {
-    return Promise.resolve()
-      .then(() => {
-        if (allowance0.lt(amount0Desired)) {
-          return token0.approve(config.managerAddress, uint256Max).then(tx => tx.wait())
-        }
-      })
-      .then(() => {
-        if (allowance1.lt(amount1Desired)) {
-          return token1.approve(config.managerAddress, uint256Max).then(tx => tx.wait())
-        }
-      })
-      .then(() => {
-        return manager.mint(mintParams)
-          .then(tx => tx.wait())
-      })
-      .then(() => {
-        alert('Liquidity added!');
-      });
-  }).catch((err) => {
-    if (err.error && err.error.data && err.error.data.data) {
-      let error;
-
-      try {
-        error = manager.interface.parseError(err.error.data.data);
-      } catch (e) {
-        if (e.message.includes('no matching error')) {
-          error = poolInterface.parseError(err.error.data.data);
-        }
-      }
-
-      switch (error.name) {
-        case "SlippageCheckFailed":
-          alert(`Slippage check failed (amount0: ${formatAmount(error.args.amount0)}, amount1: ${formatAmount(error.args.amount1)})`)
-          return;
-
-        case "ZeroLiquidity":
-          alert('Zero liquidity!');
-          return;
-
-        default:
-          console.error(error);
-          alert('Unknown error!');
-
-          return;
-      }
-    }
-
-    console.error(err);
-    alert('Failed!');
-  });
-}
 
 const BackButton = ({ onClick }) => {
   return (
@@ -126,7 +50,7 @@ const PriceRange = ({ lowerPrice, upperPrice, setLowerPrice, setUpperPrice, disa
 const AmountInput = ({ amount, disabled, setAmount, token }) => {
   return (
     <fieldset>
-      <label htmlFor={token + "_liquidity"}>{token} amount</label>
+      <label htmlFor={token.symbol + "_liquidity"}>{token.symbol} amount</label>
       <input
         id={token + "_liquidity"}
         onChange={(ev) => setAmount(ev.target.value)}
@@ -138,9 +62,10 @@ const AmountInput = ({ amount, disabled, setAmount, token }) => {
   );
 }
 
-const LiquidityForm = ({ pair, toggle }) => {
+const LiquidityForm = ({ toggle, token0Info, token1Info, tickSpacing }) => {
   const metamaskContext = useContext(MetaMaskContext);
   const enabled = metamaskContext.status === 'connected';
+  const account = metamaskContext.account;
   const poolInterface = new ethers.utils.Interface(config.ABIs.Pool);
 
   const [token0, setToken0] = useState();
@@ -155,12 +80,12 @@ const LiquidityForm = ({ pair, toggle }) => {
 
   useEffect(() => {
     setToken0(new ethers.Contract(
-      config.token0Address,
+      token0Info.address,
       config.ABIs.ERC20,
       new ethers.providers.Web3Provider(window.ethereum).getSigner()
     ));
     setToken1(new ethers.Contract(
-      config.token1Address,
+      token1Info.address,
       config.ABIs.ERC20,
       new ethers.providers.Web3Provider(window.ethereum).getSigner()
     ));
@@ -169,13 +94,92 @@ const LiquidityForm = ({ pair, toggle }) => {
       config.ABIs.Manager,
       new ethers.providers.Web3Provider(window.ethereum).getSigner()
     ));
-  }, []);
+  }, [token0Info, token1Info]);
 
-  const addLiquidity_ = (e) => {
+  /**
+   * Adds liquidity to a pool. Asks user to allow spending of tokens.
+   */
+  const addLiquidity = (e) => {
     e.preventDefault();
+
+    if (!token0 || !token1) {
+      return;
+    }
+
     setLoading(true);
-    addLiquidity(metamaskContext.account, lowerPrice, upperPrice, amount0, amount1, { token0, token1, manager, poolInterface })
-      .finally(() => setLoading(false));
+
+    const amount0Desired = ethers.utils.parseEther(amount0);
+    const amount1Desired = ethers.utils.parseEther(amount1);
+    const amount0Min = amount0Desired.mul((100 - slippage) * 100).div(10000);
+    const amount1Min = amount1Desired.mul((100 - slippage) * 100).div(10000);
+
+    const lowerTick = priceToTick(lowerPrice);
+    const upperTick = priceToTick(upperPrice);
+    const mintParams = {
+      tokenA: token0.address,
+      tokenB: token1.address,
+      tickSpacing: tickSpacing,
+      lowerTick: nearestUsableTick(lowerTick, tickSpacing),
+      upperTick: nearestUsableTick(upperTick, tickSpacing),
+      amount0Desired, amount1Desired, amount0Min, amount1Min
+    }
+
+    return Promise.all(
+      [
+        token0.allowance(account, config.managerAddress),
+        token1.allowance(account, config.managerAddress)
+      ]
+    ).then(([allowance0, allowance1]) => {
+      return Promise.resolve()
+        .then(() => {
+          if (allowance0.lt(amount0Desired)) {
+            return token0.approve(config.managerAddress, uint256Max).then(tx => tx.wait())
+          }
+        })
+        .then(() => {
+          if (allowance1.lt(amount1Desired)) {
+            return token1.approve(config.managerAddress, uint256Max).then(tx => tx.wait())
+          }
+        })
+        .then(() => {
+          return manager.mint(mintParams)
+            .then(tx => tx.wait())
+        })
+        .then(() => {
+          alert('Liquidity added!');
+        });
+    }).catch((err) => {
+      if (err.error && err.error.data && err.error.data.data) {
+        let error;
+
+        try {
+          error = manager.interface.parseError(err.error.data.data);
+        } catch (e) {
+          if (e.message.includes('no matching error')) {
+            error = poolInterface.parseError(err.error.data.data);
+          }
+        }
+
+        switch (error.name) {
+          case "SlippageCheckFailed":
+            alert(`Slippage check failed (amount0: ${formatAmount(error.args.amount0)}, amount1: ${formatAmount(error.args.amount1)})`)
+            return;
+
+          case "ZeroLiquidity":
+            alert('Zero liquidity!');
+            return;
+
+          default:
+            console.error(error);
+            alert('Unknown error!');
+
+            return;
+        }
+      }
+
+      console.error(err);
+      alert('Failed!');
+    }).finally(() => setLoading(false));
   }
 
   return (
@@ -193,13 +197,13 @@ const LiquidityForm = ({ pair, toggle }) => {
           amount={amount0}
           disabled={!enabled || loading}
           setAmount={setAmount0}
-          token={pair.token0} />
+          token={token0Info} />
         <AmountInput
           amount={amount1}
           disabled={!enabled || loading}
           setAmount={setAmount1}
-          token={pair.token1} />
-        <button className="addLiquidity" disabled={!enabled || loading} onClick={addLiquidity_}>Add liquidity</button>
+          token={token1Info} />
+        <button className="addLiquidity" disabled={!enabled || loading} onClick={addLiquidity}>Add liquidity</button>
       </form>
     </section>
   );
